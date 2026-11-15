@@ -1,0 +1,1 @@
+<d:VariableScheme xmlns:d="ddi:logicalproduct:3_3" agencyID="school-a" id="vars" version="2024"><d:Variable id="v1"><d:Label>就业状态</d:Label><d:QuestionReference agencyID="school-a" id="q1" version="1"/><d:UniverseReference agencyID="school-a" id="u1" version="2"/><d:CodeSchemeReference agencyID="school-a" id="codes" version="1"/></d:Variable></d:VariableScheme>

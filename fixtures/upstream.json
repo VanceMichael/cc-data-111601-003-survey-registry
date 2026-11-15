@@ -1,0 +1,49 @@
+{
+  "catalog": {
+    "entry": "/release",
+    "registry": "/registry"
+  },
+  "resources": {
+    "/primary": {
+      "file": "primary.bin",
+      "type": "application/xml"
+    },
+    "/release": {
+      "file": "resource-01.bin",
+      "type": "application/json"
+    },
+    "/objects/q1": {
+      "file": "resource-02.bin",
+      "type": "application/xml",
+      "phases": {}
+    },
+    "/objects/u1": {
+      "file": "resource-03.bin",
+      "type": "application/xml",
+      "phases": {
+        "1": {
+          "status": 404
+        }
+      }
+    },
+    "/objects/codes-1": {
+      "file": "resource-04.bin",
+      "type": "application/xml",
+      "phases": {}
+    },
+    "/objects/codes-2": {
+      "file": "resource-05.bin",
+      "type": "application/xml",
+      "phases": {}
+    },
+    "/objects/other": {
+      "file": "resource-06.bin",
+      "type": "application/xml",
+      "phases": {}
+    },
+    "/registry": {
+      "file": "resource-07.bin",
+      "type": "application/json"
+    }
+  }
+}
