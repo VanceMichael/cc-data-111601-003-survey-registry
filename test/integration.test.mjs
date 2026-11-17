@@ -40,3 +40,65 @@ test('来源领取、原件持久化、重启查询及无副作用拒收', async
     assert.ok(body.includes('primary'));
   } finally { await service.close(); await provider.close(); await rm(directory, { recursive: true, force: true }); }
 });
+test('按发布入口领取整轮引用，缺失层保留并可后续补采', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'wave-test-'));
+  const provider = await startProvider();
+  const service = await startService({ source: provider.url, directory });
+  const collect = path => fetch(`${service.url}/waves`, { method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(path == null ? {} : { path }) });
+  try {
+    const phase = await fetch(`${provider.url}/_phase`, { method: 'POST', body: JSON.stringify({ phase: 1 }) });
+    assert.equal(phase.status, 200);
+    const first = await collect();
+    assert.equal(first.status, 201);
+    const incomplete = await first.json();
+    assert.equal(incomplete.status, 'incomplete');
+    assert.equal(incomplete.supplementable, true);
+    const variable = incomplete.variables[0];
+    assert.equal(variable.key, '["school-a","vars","2024","v1"]');
+    assert.deepEqual(variable.missingLayers, ['universe']);
+    assert.equal(variable.universe, null);
+    assert.equal(incomplete.missing[0].layer, 'universe');
+    assert.equal(incomplete.missing[0].variableKey, variable.key);
+
+    const missing = await (await fetch(`${service.url}/waves/missing?key=${encodeURIComponent(incomplete.key)}`)).json();
+    assert.equal(missing.length, 1);
+    assert.equal(missing[0].wave, incomplete.id);
+    assert.equal(missing[0].reason, 'source_status_404');
+
+    // Re-collecting the same state is the same snapshot; nothing is invented.
+    assert.equal((await (await collect()).json()).id, incomplete.id);
+
+    await fetch(`${provider.url}/_phase`, { method: 'POST', body: JSON.stringify({ phase: 0 }) });
+    const second = await (await collect()).json();
+    assert.notEqual(second.id, incomplete.id);
+    assert.equal(second.previous, incomplete.id);
+    assert.equal(second.status, 'complete');
+    assert.equal(second.variables[0].universe.identity.version, '2');
+    assert.equal(second.variables[0].codeScheme.identity.version, '1');
+
+    // The old snapshot stays queryable exactly as it was collected.
+    const kept = await (await fetch(`${service.url}/waves/${incomplete.id}`)).json();
+    assert.equal(kept.status, 'incomplete');
+    assert.equal(kept.variables[0].universe, null);
+    const latest = await (await fetch(`${service.url}/waves/latest?key=${encodeURIComponent(incomplete.key)}`)).json();
+    assert.equal(latest.id, second.id);
+    const list = await (await fetch(`${service.url}/waves?key=${encodeURIComponent(incomplete.key)}`)).json();
+    assert.deepEqual(list.map(item => item.id), [incomplete.id, second.id]);
+
+    // The generic single-object intake and its listing remain unchanged.
+    const intake = await fetch(`${service.url}/intakes`, { method: 'POST',
+      headers: { 'content-type': 'application/json' }, body: JSON.stringify({ path: '/primary' }) });
+    assert.equal(intake.status, 201);
+    assert.equal((await (await fetch(`${service.url}/records`)).json()).length, 1);
+    // Wave members are still re-readable as raw bytes.
+    const universe = second.variables[0].universe;
+    assert.deepEqual(Buffer.from(await (await fetch(`${service.url}/objects/${universe.digest}`)).arrayBuffer()),
+      await readFile(new URL('../fixtures/resource-03.bin', import.meta.url)));
+    const usages = await (await fetch(`${service.url}/objects/${universe.digest}?view=usages`)).json();
+    assert.deepEqual(usages.map(item => item.wave), [second.id]);
+    assert.equal(usages[0].referencedBy[0].variableKey, second.variables[0].key);
+    assert.equal((await collect('/missing')).status, 422);
+  } finally { await service.close(); await provider.close(); await rm(directory, { recursive: true, force: true }); }
+});
